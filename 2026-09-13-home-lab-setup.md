@@ -20,10 +20,26 @@ Wyse that lets me in, a mini PC called **athena** that runs Proxmox, and a VM in
 it called **den** that runs all of my apps.
 
 ```mermaid
-flowchart LR
-  me[Me, anywhere] -->|Tailscale| wyse[Dell Wyse<br/>bastion]
-  wyse --> athena[athena<br/>Proxmox]
-  athena --> den[den<br/>apps]
+flowchart TB
+  me(["Me, anywhere"]):::gray
+
+  subgraph home["Home network"]
+    wyse("Dell Wyse<small>Tailscale bastion</small>"):::blue
+
+    subgraph athena["athena · Proxmox"]
+      subgraph den["den · Docker"]
+        media("Jellyfin and Immich<small>Movies, shows, photos</small>"):::pink
+        files("Samba and File Browser<small>Storage</small>"):::yellow
+        net("AdGuard and Nginx Proxy Manager<small>DNS and hostnames</small>"):::green
+        glance("Glance<small>Dashboard</small>"):::purple
+        media ~~~ net
+        files ~~~ glance
+      end
+    end
+  end
+
+  me -- Tailscale --> wyse
+  wyse --> den
 ```
 
 ## The front door: a Dell Wyse
