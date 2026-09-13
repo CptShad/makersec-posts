@@ -1,0 +1,75 @@
+# Builds the MakerSec site from the posts in this repo and publishes it to GitHub Pages.
+#
+# One-time setup: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+# The website code is checked out from <owner>/makersec. To use a different repo,
+# set a repository variable MAKERSEC_REPO (Settings -> Secrets and variables -> Actions).
+
+name: Publish to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out posts
+        uses: actions/checkout@v4
+        with:
+          path: posts
+
+      - name: Check out website code
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.MAKERSEC_REPO || format('{0}/makersec', github.repository_owner) }}
+          path: site
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        working-directory: site
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Read Pages address
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build
+        working-directory: site
+        env:
+          LOCAL_CONTENT: ../posts
+          OUT_DIR: ../dist
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          SITE_URL: ${{ steps.pages.outputs.base_url }}
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_BRANCH: ${{ github.ref_name }}
+          SITE_TITLE: ${{ vars.SITE_TITLE || 'MakerSec' }}
+          SITE_AUTHOR: ${{ vars.SITE_AUTHOR }}
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
