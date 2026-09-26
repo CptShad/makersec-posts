@@ -35,13 +35,13 @@ jobs:
           repository: ${{ vars.MAKERSEC_REPO || format('{0}/makersec', github.repository_owner) }}
           path: site
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
+          bun-version: latest
 
       - name: Install
         working-directory: site
-        run: npm install --omit=dev --no-audit --no-fund
+        run: bun install --production --frozen-lockfile
 
       - name: Read Pages address
         id: pages
@@ -58,7 +58,7 @@ jobs:
           GITHUB_BRANCH: ${{ github.ref_name }}
           SITE_TITLE: ${{ vars.SITE_TITLE || 'MakerSec' }}
           SITE_AUTHOR: ${{ vars.SITE_AUTHOR }}
-        run: npm run build
+        run: bun run build
 
       - uses: actions/upload-pages-artifact@v3
         with:
