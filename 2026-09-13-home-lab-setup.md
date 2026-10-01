@@ -2,91 +2,95 @@
 title: Home Lab Setup
 date: 2026-09-13
 status: working
-tags: [homelab, proxmox, docker, tailscale]
-summary: A Dell Wyse as the front door, a mini PC running Proxmox, and one VM called den that runs every app I host.
+tags: [homelab, proxmox, opnsense, networking, docker, tailscale, 3d-printing, rack]
+summary: One mini PC inside a 3D-printed 10" rack running Proxmox, with OPNsense routing the house and a Docker VM for the rest of the apps I host.
 parts:
-  - Dell Wyse thin client
-  - Mini PC "athena"
-  - 1 TB external hard drive
+  - HP EliteDesk 705 G4 Mini (16 GB)
+  - Intel I226-V M.2 NIC
+  - TP-Link ER605 v2
+  - Archer AX1500
+  - Printed 10-inch rack
+  - M6 hardware
 tools:
   - Proxmox
+  - OPNsense
+  - OpenWrt
   - Tailscale
   - Docker
-  - Glance
+  - AdGuard Home
+  - Bambu Lab A1 mini
 ---
 
-My home lab runs on three layers, each nested inside the one before it: a small Dell
-Wyse that lets me in, a mini PC called **athena** that runs Proxmox, and a VM inside
-it called **den** that runs all of my apps.
+## Overview
+My homelab consists of a mini PC and a 3D-printed rack. The mini PC is responsible for being my router 
+along with being a place for my self-hosted apps.<br>
+It is an HP EliteDesk Mini which I added an extra NIC to, so that I can run OPNsense. 
+The PC runs Proxmox, which manages the OPNsense VM along with Tailscale and the Docker VM containing all my apps.
+<p>The plan in the future is to have more mini PCs added so I can play around with Kubernetes.
+My primary reason to build it was to learn networking and get more comfortable with Linux to help me better my skills for the day job.
 
 ```mermaid
 flowchart TB
   me(["Me, anywhere"]):::gray
 
   subgraph home["Home network"]
-    wyse("Dell Wyse<small>Tailscale bastion</small>"):::blue
+    isp("ISP router<small>192.168.1.1</small>"):::gray
 
-    subgraph athena["athena · Proxmox"]
-      subgraph den["den · Docker"]
-        media("Jellyfin and Immich<small>Movies, shows, photos</small>"):::pink
-        files("Samba and File Browser<small>Storage</small>"):::yellow
-        net("AdGuard and Nginx Proxy Manager<small>DNS and hostnames</small>"):::green
-        glance("Glance<small>Dashboard</small>"):::purple
-        media ~~~ net
-        files ~~~ glance
-      end
+    subgraph athena["athena · Proxmox · 192.168.2.115"]
+      opn("OPNsense<small>Router, 192.168.2.1</small>"):::green
+      den("den · Docker<small>192.168.2.116</small>"):::pink
+      ts("Tailscale LXC<small>Advertises 192.168.2.0/24</small>"):::blue
     end
+
+    er("ER605 on OpenWrt<small>VLAN switch, 192.168.2.2</small>"):::yellow
+    ap("Archer AX1500<small>Wi-Fi access point</small>"):::purple
+    wired("Wired devices"):::gray
   end
 
-  me -- Tailscale --> wyse
-  wyse --> den
+  isp --> opn
+  opn -- "VLAN 10 trunk" --> er
+  er --> ap
+  er --> wired
+  me -- Tailscale --> ts
 ```
 
-## The front door: a Dell Wyse
+The mini PC has two network ports. The onboard Realtek carries WAN, and an M.2 Intel
+I226-V carries the LAN trunk to the switch. OPNsense uses bridged virtio NICs instead
+of PCI passthrough.<br>
+The ER605 used to route the network. Now it runs OpenWrt and does nothing but switch
+VLAN-tagged traffic.
 
-The entry point is a small Dell Wyse thin client with Tailscale on it. When I'm away
-from home, that's how I get in: I connect to the tailnet, reach the Wyse, and go from
-there.
+## The Mini Rack
 
-A thin client suits this job well. It's small and quiet, and it has nothing else to
-do. It also keeps the way in off the machine that runs everything else, so I can
-still reach the network while athena is being rebooted or rebuilt.
+[**Modular 10" Server Rack**](https://makerworld.com/en/models/1452571-modular-10-server-rack#profileId-1513461) from MakerWorld.<br>
+Most of the long parts in this were modified so I can print it using my
+A1 Mini. Pretty handy what a few sessions with Claude and some callipers can get you
+now. <br>I am very amateur in terms of 3D modelling so this was a godsend for me.
+<p>Have a play around with the model!
 
-## The hypervisor: athena
+![Mini rack](models/mini-rack.glb)
 
-athena is a mini PC running Proxmox. Everything I host runs inside it as a virtual
-machine, which means I can snapshot, rebuild or experiment without touching the
-hardware.
 
-## Where the apps live: den
+## How the network is managed
 
-den is the VM inside athena, and it's where every app runs, each in its own Docker
-container:
+- AdGuard serves as my DNS, which provides me with network-wide adblock and private DNS routing.
+- Tailscale runs in its own LXC and advertises my subnet _192.168.2.0/24_ to my tailnet. This allows
+me to connect to any of the devices connected to my OPNsense.
+
+## What apps do I self-host
+
+I host all my Docker containers on another VM I call "The Den".
 
 - **Jellyfin** for movies and shows
 - **Immich** for photo backup
 - **qBittorrent** for downloads
-- **File Browser** to get at files from a browser
-- **A Samba share** so my other machines can use den's storage
+- **File Browser** and **SMB share** so I can host a NAS
 - **UpSnap** to wake machines on the network
-- **AdGuard Home** to block ads for the whole network
+- **AdGuard Home** to serve as my DNS
 - **Nginx Proxy Manager** so each app gets a proper name instead of a port number
-- **Glance** to keep an eye on all of it
+- **Glance**, my dashboard of choice
 
 ## The dashboard
-
-Glance is the page I actually open. It gathers everything onto one screen: the time
-and weather, a calendar, Hacker News and Lobsters, and the state of every service I
-run.
+Glance is my current dashboard of choice that I have set up. It has a very simple-to-configure UI which I use to show some basic things, along with an RSS feed, the status of my services, my storage status and my DNS stats.
 
 ![The Glance dashboard](images/glance-dashboard.png)
-
-The services panel is the part I rely on most. Glance checks each app once a minute,
-shows a tick when it responds, and says how long the response took.
-
-![Every service up, with response times](images/glance-services.png)
-
-On the right, Glance shows how hard den is working, plus how many DNS queries AdGuard
-has answered and how many of them it blocked.
-
-![Server and DNS stats](images/glance-stats.png)
